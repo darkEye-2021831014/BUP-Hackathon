@@ -17,6 +17,7 @@ Architecture (per Section 2 of the master prompt):
 from __future__ import annotations
 
 import logging
+import math
 import os
 from typing import Any, Dict, List
 
@@ -179,15 +180,33 @@ def final_validator(
 # ---------------------------------------------------------------------------
 
 
+def _scrub_non_finite(obj: Any) -> Any:
+    """Replace NaN/Inf floats with a sentinel string so the response is
+    valid JSON. Pydantic's validation errors can include the offending
+    input value (e.g. NaN), which Python's json.dumps rejects."""
+    if isinstance(obj, float):
+        if not math.isfinite(obj):
+            return "NaN"
+        return obj
+    if isinstance(obj, dict):
+        return {k: _scrub_non_finite(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_scrub_non_finite(v) for v in obj]
+    return obj
+
+
 @app.exception_handler(RequestValidationError)
 async def _validation_handler(request: Request, exc: RequestValidationError):
-    # exc.errors() can contain non-JSON values; jsonable_encoder handles
-    # the coercion (and returns plain primitives suitable for JSON).
+    # exc.errors() can contain non-JSON values (NaN/Inf floats included);
+    # jsonable_encoder handles most coercion, but NaN/Inf still slip
+    # through and crash json.dumps. Scrub them to a string sentinel.
+    encoded = jsonable_encoder(exc.errors())
+    safe = _scrub_non_finite(encoded)
     return JSONResponse(
         status_code=400,
         content={
             "detail": "Invalid request payload",
-            "errors": jsonable_encoder(exc.errors()),
+            "errors": safe,
         },
     )
 

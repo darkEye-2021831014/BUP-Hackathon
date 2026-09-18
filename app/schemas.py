@@ -38,7 +38,7 @@ class HourData(BaseModel):
 class BatteryConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    capacity_kwh: StrictFloat = Field(..., gt=0)
+    capacity_kwh: StrictFloat = Field(..., ge=0)
     initial_energy_kwh: StrictFloat = Field(..., ge=0)
     minimum_energy_kwh: StrictFloat = Field(..., ge=0)
     max_charge_kwh_per_hour: StrictFloat = Field(..., ge=0)
@@ -46,6 +46,19 @@ class BatteryConfig(BaseModel):
 
     @model_validator(mode="after")
     def _check_consistency(self) -> "BatteryConfig":
+        # With a zero-capacity battery the upper bound is 0, so the
+        # other fields must collapse to 0 too — otherwise the request
+        # is internally inconsistent.
+        if self.capacity_kwh == 0:
+            for fld in ("initial_energy_kwh", "minimum_energy_kwh",
+                        "max_charge_kwh_per_hour",
+                        "max_discharge_kwh_per_hour"):
+                v = getattr(self, fld)
+                if v != 0:
+                    raise ValueError(
+                        f"{fld} must be 0 when capacity_kwh is 0"
+                    )
+            return self
         if self.initial_energy_kwh > self.capacity_kwh:
             raise ValueError(
                 "initial_energy_kwh must be <= capacity_kwh"
@@ -90,6 +103,10 @@ class OptimizeRequest(BaseModel):
         if seen != expected:
             missing = expected - seen
             raise ValueError(f"hours must include 0..23, missing: {sorted(missing)}")
+        # The spec doesn't mandate input ordering. Normalize to ascending
+        # so the optimizer's hour indices align with the response grid.
+        if [h.hour for h in self.hours] != list(range(24)):
+            self.hours.sort(key=lambda h: h.hour)
         return self
 
 

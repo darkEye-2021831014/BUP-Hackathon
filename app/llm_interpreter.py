@@ -887,7 +887,213 @@ _RE_SOLAR_PCT_PLAIN = _re.compile(
     _re.IGNORECASE,
 )
 _RE_SOLAR_KEYWORDS = _re.compile(
-    r"\b(?:solar|photovoltaic|pv|rooftop\s+solar|panels?|forecast\s+solar)\b",
+    r"\b(?:solar|photovoltaic|pv|rooftop\s+solar|panels?|forecast\s+solar|array)\b",
+    _re.IGNORECASE,
+)
+
+
+# ---------- Additions for testkit paraphrases ----------
+
+# "by N%" / "drops by N%" / "down by N%": a percentage drop, factor = 1 - N/100.
+_RE_SOLAR_BY_PCT = _re.compile(
+    r"(?:solar|output|production|forecast|generation)\s+"
+    r"(?:will\s+|is\s+|shall\s+|expected\s+to\s+|to\s+)?"
+    r"(?:fall|drops?|drops\s+by|fell|fall\s+by|falls\s+by|"
+    r"reduce[ds]?|cut|cuts?|cut\s+by|trim|trimmed|trimming|"
+    r"decreases?|drops?\s+by|shrink|shrinks?|"
+    r"is\s+down|be\s+down|down\s+by)\s+"
+    r"(?:by\s+|about\s+|approximately\s+|roughly\s+|around\s+)?"
+    r"(\d+(?:\.\d+)?)\s*(?:%|percent)(?:\b|\s|$)",
+    _re.IGNORECASE,
+)
+
+# "drops to N%": remaining fraction, factor = N/100 (kept separate from
+# the "by" pattern because "to" carries the opposite semantic).
+_RE_SOLAR_TO_PCT = _re.compile(
+    r"(?:solar|output|production|forecast|generation|it)\s+"
+    r"(?:will\s+|is\s+|shall\s+|expected\s+to\s+|to\s+)?"
+    r"(?:fall|drops?|fell|cut|cuts?|reduce[ds]?|"
+    r"decreases?|shrink|shrinks?)\s+"
+    r"to\s+(?:about\s+|approximately\s+|roughly\s+|around\s+|just\s+)?"
+    r"(\d+(?:\.\d+)?)\s*(?:%|percent)(?:\b|\s|$)",
+    _re.IGNORECASE,
+)
+
+# "run at N% of forecast" / "operate at N% of capacity" / "N% of normal"
+# — these express the remaining fraction, so factor = N/100.
+_RE_SOLAR_AT_PCT_OF = _re.compile(
+    r"(?:run|operate|operates?|running|produces?|output)\s+"
+    r"(?:at|to|about|roughly|approximately)?\s*"
+    r"(\d+(?:\.\d+)?)\s*(?:%|percent)\s+"
+    r"(?:of\s+)?(?:forecast|normal|expected|peak|capacity|rated)",
+    _re.IGNORECASE,
+)
+
+# "completely unavailable" / "entirely unavailable" / "be unavailable"
+_RE_SOLAR_UNAVAILABLE = _re.compile(
+    r"\b(?:completely|entirely|totally|fully|"
+    r"effectively|practically)?\s*"
+    r"unavailable\b",
+    _re.IGNORECASE,
+)
+
+# "Hold a quarter of the pack in reserve" / "Retain 10 percent of capacity"
+# — fraction-of-capacity reserves; the LLM never sees capacity but we do.
+_RE_RESERVE_FRACTION_OF_CAPACITY = _re.compile(
+    r"(?:hold|retain|keep|maintain|reserve|store)\s+"
+    r"(?:a\s+)?(?:minimum\s+(?:of\s+)?|at\s+least\s+|about\s+|"
+    r"approximately\s+|roughly\s+)?"
+    r"(\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten)\s+"
+    r"(?:%|percent)\s+(?:of\s+)?(?:capacity|the\s+(?:pack|battery))",
+    _re.IGNORECASE,
+)
+_RE_RESERVE_FRACTION_OF_PACK = _re.compile(
+    r"\b(?:hold|retain|keep|maintain|reserve|store)\s+"
+    r"(?:a\s+)?(?:minimum\s+(?:of\s+)?|at\s+least\s+)?"
+    r"(?P<frac>quarter|half|third|fifth|fourth|two\s+thirds|three\s+quarters)"
+    r"\s+of\s+(?:the\s+)?(?:pack|battery|capacity)",
+    _re.IGNORECASE,
+)
+
+# Map the fraction words captured by _RE_RESERVE_FRACTION_OF_PACK to a
+# Map the fraction words captured by _RE_RESERVE_FRACTION_OF_PACK to a
+# percentage of battery capacity.
+_RESERVE_FRACTION_PCT: Dict[str, float] = {
+    "quarter": 25.0,
+    "half": 50.0,
+    "third": 33.33,
+    "fifth": 20.0,
+    "fourth": 25.0,
+    "two thirds": 66.67,
+    "three quarters": 75.0,
+}
+
+# "Maintain a floor of X kWh" / "Hold back a minimum of X kWh"
+_RE_RESERVE_FLOOR = _re.compile(
+    r"(?:maintain|hold|keep|reserve|retain|store|have)\s+"
+    r"(?:a\s+)?(?:floor|minimum|buffer)\s+(?:of\s+)?"
+    r"(\d+(?:\.\d+)?)\s*kwh",
+    _re.IGNORECASE,
+)
+_RE_RESERVE_HOLD_BACK = _re.compile(
+    r"\bhold\s+back\s+(?:a\s+)?(?:minimum|at\s+least)?\s*"
+    r"(\d+(?:\.\d+)?)\s*kwh",
+    _re.IGNORECASE,
+)
+
+# "Do not pull more than X kWh" / "may not pull more than X kWh"
+_RE_GRID_CAP_PULL = _re.compile(
+    r"(?:do\s+not|don'?t|must\s+not|may\s+not|should\s+not|"
+    r"cannot|can'?t)\s+pull\s+more\s+than\s+"
+    r"(\d+(?:\.\d+)?)\s*kwh",
+    _re.IGNORECASE,
+)
+
+# "Cap grid import at X kWh per hour" / "Cap grid at X kWh per hour"
+_RE_GRID_CAP_PER_HOUR = _re.compile(
+    r"\bcap\s+(?:grid\s+|import\s+|intake\s+|draw\s+)?"
+    r"(?:grid\s+|import\s+|intake\s+|draw\s+)?"
+    r"(?:at|to)\s+(\d+(?:\.\d+)?)\s*kwh\s+per\s+hour",
+    _re.IGNORECASE,
+)
+
+# "The evening transformer limit is X kWh of grid import" — noun phrase
+_RE_GRID_CAP_NOUN_LIMIT = _re.compile(
+    r"\blimit\s+is\s+(\d+(?:\.\d+)?)\s*kwh\s+(?:of\s+)?"
+    r"(?:grid\s+)?(?:import|intake|draw)",
+    _re.IGNORECASE,
+)
+# "(evening) grid cap X kWh" / "transformer cap X kWh"
+_RE_GRID_CAP_NOUN_CAP = _re.compile(
+    r"\bcap\s+(?:is|=|at)\s+(\d+(?:\.\d+)?)\s*kwh",
+    _re.IGNORECASE,
+)
+# "max grid intake X kWh" / "maximum grid import X kWh"
+_RE_GRID_CAP_MAX_NOUN = _re.compile(
+    r"\b(?:max(?:imum)?|ceiling)\s+(?:grid\s+)?(?:import|intake|draw)"
+    r"\s+(?:is|=|at|of)?\s*(\d+(?:\.\d+)?)\s*kwh",
+    _re.IGNORECASE,
+)
+
+# "No grid import at all" / "No grid drawing at all" — cap = 0.
+_RE_GRID_CAP_NONE_AT_ALL = _re.compile(
+    r"\bno\s+(?:grid\s+)?(?:import|intake|draw|use|pull)\s+at\s+all\b",
+    _re.IGNORECASE,
+)
+# "No grid import from X until Y" / "Zero grid import from X to Y"
+_RE_GRID_CAP_NONE_PERIOD = _re.compile(
+    r"\b(?:no|zero|nil|nothing)\s+(?:grid\s+)?(?:import|intake|draw|use|pull)\b",
+    _re.IGNORECASE,
+)
+
+# no-discharge paraphrases the existing regex doesn't catch:
+#   "Do not draw from the battery" / "Battery supply to campus load is disabled"
+#   "The inverter cannot export from the pack" / "Hold the battery output at zero"
+_RE_NO_DISCHARGE_DRAW = _re.compile(
+    r"\bdo\s+not\s+(?:draw|use)\s+from\s+the\s+battery\b",
+    _re.IGNORECASE,
+)
+_RE_NO_DISCHARGE_SUPPLY_DISABLED = _re.compile(
+    r"\b(?:battery|pack)\s+supply\s+(?:to\s+\w+\s+\w+\s+)?"
+    r"(?:is|are|will\s+be)\s+(?:disabled|blocked|offline|isolated|"
+    r"unavailable|prohibited|forbidden)\b",
+    _re.IGNORECASE,
+)
+_RE_NO_DISCHARGE_INVERTER = _re.compile(
+    r"\b(?:inverter|system|controller)\s+(?:cannot|can'?t|must\s+not|"
+    r"may\s+not|will\s+not|won'?t)\s+(?:export|discharge|draw|pull)\b",
+    _re.IGNORECASE,
+)
+_RE_NO_DISCHARGE_OUTPUT_ZERO = _re.compile(
+    r"\bhold\s+(?:the\s+)?battery\s+output\s+at\s+(?:zero|0)\b",
+    _re.IGNORECASE,
+)
+_RE_NO_DISCHARGE_NO_DRAW = _re.compile(
+    r"\bno\s+discharging\s+from\b",
+    _re.IGNORECASE,
+)
+
+# no-charge paraphrases the existing regex doesn't catch:
+#   "The battery must not take in any energy"
+#   "Charging is blocked for one hour starting at"
+#   "Please keep the charger offline from"
+_RE_NO_CHARGE_TAKE_IN = _re.compile(
+    r"\bmust\s+not\s+(?:take\s+in|absorb|accept)\s+(?:any|more)\s+energy\b",
+    _re.IGNORECASE,
+)
+_RE_NO_CHARGE_BLOCKED_DURATION = _re.compile(
+    r"\bcharging\s+is\s+blocked\s+for\b",
+    _re.IGNORECASE,
+)
+_RE_NO_CHARGE_KEEP_OFFLINE = _re.compile(
+    r"\bkeep\s+(?:the\s+)?charger\s+offline\b",
+    _re.IGNORECASE,
+)
+
+# no_op guard: notes about tomorrow / next week / yesterday / future-dated
+# events don't affect today's schedule.
+_RE_NOT_TODAY = _re.compile(
+    r"\b(?:tomorrow|next\s+week|next\s+month|next\s+year|yesterday|"
+    r"last\s+week|future|scheduled\s+(?:for|to)|will\s+(?:be\s+)?"
+    r"(?:scheduled|happening|starting)\s+(?:on|at|tomorrow))\b",
+    _re.IGNORECASE,
+)
+
+# Time-window patterns for `_parse_time_range`. Module-level so the
+# compiler doesn't re-run for every note.
+_RE_TIME_FROM_THROUGH_TO = _re.compile(
+    r"(?:from|between)\s+"
+    r"(?P<a>noon|midnight|\d{1,2}(?::\d{2})?\s*(?:am|pm))"
+    r"\s+through(?:\s+to)?\s+"
+    r"(?P<b>noon|midnight|\d{1,2}(?::\d{2})?\s*(?:am|pm))",
+    _re.IGNORECASE,
+)
+# Single-hour windows like "starting at 5 PM" / "beginning 11 PM" /
+# "single hour starting at 4 AM".
+_RE_TIME_SINGLE_HOUR = _re.compile(
+    r"(?:starting\s+at|beginning(?:\s+at)?|beginning\s+from|"
+    r"single\s+hour\s+starting\s+at|single\s+hour\s+beginning(?:\s+at)?)\s+"
+    r"(?P<h>noon|midnight|\d{1,2}(?::\d{2})?\s*(?:am|pm))",
     _re.IGNORECASE,
 )
 
@@ -1044,6 +1250,23 @@ def _parse_time_range(note: str) -> list[int] | None:
         if 0 <= a_h <= 23 and 0 <= b_h <= 23:
             return _build(a_h, b_h)
 
+    # Pattern C3: "from X [AM/PM] through [to] Y [AM/PM]" — the
+    # participant phrase "from 7 AM through to 9 AM" uses an extra
+    # "to" after "through" that pattern C wouldn't catch.
+    m = _RE_TIME_FROM_THROUGH_TO.search(note_lc)
+    if m:
+        a_h = _hour_token(m.group("a").strip())
+        b_h = _hour_token(m.group("b").strip())
+        if a_h is not None and b_h is not None:
+            return _build(a_h, b_h)
+
+    # Pattern E: single-hour windows that begin at a named hour.
+    m = _RE_TIME_SINGLE_HOUR.search(note_lc)
+    if m:
+        h = _hour_token(m.group("h").strip())
+        if h is not None:
+            return [h]
+
     return None
 
 
@@ -1063,6 +1286,20 @@ def _deterministic_interpret(
         hours = _parse_time_range(n) or _parse_time_range(note)
         directive: Dict[str, Any] | None = None
 
+        # 0) Notes that explicitly reference a non-today window (tomorrow /
+        #    next week / yesterday / future-dated) are no_op, even if they
+        #    look like they describe a directive.
+        if _RE_NOT_TODAY.search(n):
+            directive = {
+                "note_index": i,
+                "applies": False,
+                "directive_type": "no_op",
+                "structured_adjustment": None,
+                "explanation": "Note refers to a future or past day, not today's schedule.",
+            }
+            out.append(directive)
+            continue
+
         # 1) minimum_battery_reserve: "at least X kWh" / "X% of the battery"
         #    "X kWh of battery" (without reserve verbs) requires explicit
         #    reserve context to avoid false positives on grid cap phrases.
@@ -1076,37 +1313,56 @@ def _deterministic_interpret(
         m_kwh8 = _RE_KWH_FLOOR_NOT_BELOW.search(n)
         m_kwh9 = _RE_KWH_FLOOR_VERB_FIRST.search(n)
         m_pct = _RE_PCT_FLOOR.search(n)
+        m_floor = _RE_RESERVE_FLOOR.search(n)
+        m_hold_back = _RE_RESERVE_HOLD_BACK.search(n)
+        m_frac_pct = _RE_RESERVE_FRACTION_OF_CAPACITY.search(n)
+        m_frac_pack = _RE_RESERVE_FRACTION_OF_PACK.search(n)
         if (
             m_kwh or m_kwh2 or m_kwh3 or m_kwh4 or m_kwh5
             or m_kwh6 or m_kwh7 or m_kwh8 or m_kwh9 or m_pct
+            or m_floor or m_hold_back or m_frac_pct or m_frac_pack
         ) and hours is not None:
-            chosen = (
-                m_kwh or m_kwh2 or m_kwh3 or m_kwh4 or m_kwh5
-                or m_kwh6 or m_kwh7 or m_kwh8 or m_kwh9 or m_pct
-            )
-            if chosen is m_kwh5 and not (
-                _RE_RESERVE_CONTEXT.search(n)
-                or "battery" in n
-                or "hold" in n
-            ):
-                chosen = None
-            if chosen is None:
-                pass
-            elif chosen is m_pct:
-                pct = float(m_pct.group(1))
-                mev = battery_capacity_kwh * (pct / 100.0)
-                directive = {
-                    "note_index": i,
-                    "applies": True,
-                    "directive_type": "minimum_battery_reserve",
-                    "structured_adjustment": {
-                        "hours": hours,
-                        "minimum_energy_kwh": mev,
-                    },
-                    "explanation": f"{pct}% of battery capacity required.",
-                }
-            else:
-                mev = float(chosen.group(1))
+            # Fraction-of-capacity ("Hold a quarter of the pack in reserve",
+            # "Retain 10 percent of capacity") takes precedence over the
+            # generic kWh patterns so we don't misread them as e.g. "10 kWh".
+            if m_frac_pct:
+                tok = m_frac_pct.group(1)
+                pct = _word_to_int(tok)
+                if pct is None:
+                    try:
+                        pct = float(tok)
+                    except ValueError:
+                        pct = None
+                if pct is not None:
+                    mev = battery_capacity_kwh * (float(pct) / 100.0)
+                    directive = {
+                        "note_index": i,
+                        "applies": True,
+                        "directive_type": "minimum_battery_reserve",
+                        "structured_adjustment": {
+                            "hours": hours,
+                            "minimum_energy_kwh": mev,
+                        },
+                        "explanation": f"{pct}% of battery capacity required.",
+                    }
+            elif m_frac_pack:
+                pct = _RESERVE_FRACTION_PCT.get(
+                    m_frac_pack.group("frac").lower()
+                )
+                if pct is not None:
+                    mev = battery_capacity_kwh * (pct / 100.0)
+                    directive = {
+                        "note_index": i,
+                        "applies": True,
+                        "directive_type": "minimum_battery_reserve",
+                        "structured_adjustment": {
+                            "hours": hours,
+                            "minimum_energy_kwh": mev,
+                        },
+                        "explanation": f"{pct}% of battery capacity required.",
+                    }
+            elif m_floor:
+                mev = float(m_floor.group(1))
                 directive = {
                     "note_index": i,
                     "applies": True,
@@ -1117,6 +1373,56 @@ def _deterministic_interpret(
                     },
                     "explanation": "Required minimum reserve.",
                 }
+            elif m_hold_back:
+                mev = float(m_hold_back.group(1))
+                directive = {
+                    "note_index": i,
+                    "applies": True,
+                    "directive_type": "minimum_battery_reserve",
+                    "structured_adjustment": {
+                        "hours": hours,
+                        "minimum_energy_kwh": mev,
+                    },
+                    "explanation": "Required minimum reserve.",
+                }
+            else:
+                chosen = (
+                    m_kwh or m_kwh2 or m_kwh3 or m_kwh4 or m_kwh5
+                    or m_kwh6 or m_kwh7 or m_kwh8 or m_kwh9 or m_pct
+                )
+                if chosen is m_kwh5 and not (
+                    _RE_RESERVE_CONTEXT.search(n)
+                    or "battery" in n
+                    or "hold" in n
+                ):
+                    chosen = None
+                if chosen is None:
+                    pass
+                elif chosen is m_pct:
+                    pct = float(m_pct.group(1))
+                    mev = battery_capacity_kwh * (pct / 100.0)
+                    directive = {
+                        "note_index": i,
+                        "applies": True,
+                        "directive_type": "minimum_battery_reserve",
+                        "structured_adjustment": {
+                            "hours": hours,
+                            "minimum_energy_kwh": mev,
+                        },
+                        "explanation": f"{pct}% of battery capacity required.",
+                    }
+                else:
+                    mev = float(chosen.group(1))
+                    directive = {
+                        "note_index": i,
+                        "applies": True,
+                        "directive_type": "minimum_battery_reserve",
+                        "structured_adjustment": {
+                            "hours": hours,
+                            "minimum_energy_kwh": mev,
+                        },
+                        "explanation": "Required minimum reserve.",
+                    }
 
         # 2) max_grid_window: "must not exceed X kWh" / "stay at or below"
         #    / "limit is X kWh" / "Cap grid import at X kWh" /
@@ -1130,12 +1436,25 @@ def _deterministic_interpret(
             m_cap_pur = _RE_GRID_CAP_PURCHASES.search(n)
             m_cap_lim = _RE_GRID_CAP_LIMIT_TO.search(n)
             m_cap_nex = _RE_GRID_CAP_NOT_EXCEED.search(n)
+            m_cap_pull = _RE_GRID_CAP_PULL.search(n)
+            m_cap_per_hr = _RE_GRID_CAP_PER_HOUR.search(n)
+            m_cap_noun_limit = _RE_GRID_CAP_NOUN_LIMIT.search(n)
+            m_cap_noun_cap = _RE_GRID_CAP_NOUN_CAP.search(n)
+            m_cap_max_noun = _RE_GRID_CAP_MAX_NOUN.search(n)
+            m_cap_none_at_all = _RE_GRID_CAP_NONE_AT_ALL.search(n)
+            m_cap_none_period = _RE_GRID_CAP_NONE_PERIOD.search(n)
             cap_match = (
                 m_cap or m_cap_is or m_cap_at or m_cap_noun or m_cap_short
                 or m_cap_pur or m_cap_lim or m_cap_nex
+                or m_cap_pull or m_cap_per_hr or m_cap_noun_limit
+                or m_cap_noun_cap or m_cap_max_noun
             )
-            if cap_match and hours is not None:
-                cap = float(cap_match.group(1))
+            none_match = m_cap_none_at_all or m_cap_none_period
+            if (cap_match or none_match) and hours is not None:
+                if cap_match is not None:
+                    cap = float(cap_match.group(1))
+                else:
+                    cap = 0.0  # "no grid import at all" → cap = 0
                 directive = {
                     "note_index": i,
                     "applies": True,
@@ -1153,6 +1472,11 @@ def _deterministic_interpret(
             or _RE_NO_DISCHARGE_PASSIVE.search(n)
             or _RE_NO_DISCHARGE_NOPREP.search(n)
             or _RE_DISCHARGE_BLOCKED.search(n)
+            or _RE_NO_DISCHARGE_DRAW.search(n)
+            or _RE_NO_DISCHARGE_SUPPLY_DISABLED.search(n)
+            or _RE_NO_DISCHARGE_INVERTER.search(n)
+            or _RE_NO_DISCHARGE_OUTPUT_ZERO.search(n)
+            or _RE_NO_DISCHARGE_NO_DRAW.search(n)
             or "no discharge" in n
             or "discharge disabled" in n
             or "discharge is disabled" in n
@@ -1181,6 +1505,9 @@ def _deterministic_interpret(
             or _RE_NO_CHARGE_NOPREP.search(n)
             or _RE_CHARGE_BLOCKED.search(n)
             or _RE_NO_CHARGE_BARE.search(n)
+            or _RE_NO_CHARGE_TAKE_IN.search(n)
+            or _RE_NO_CHARGE_BLOCKED_DURATION.search(n)
+            or _RE_NO_CHARGE_KEEP_OFFLINE.search(n)
             or "no charge" in n
             or "no charging" in n
             or "charger is isolated" in n
@@ -1211,7 +1538,9 @@ def _deterministic_interpret(
                 }
 
         # 5) solar_reduction: "X% reduction" / "X% outage" / "X% solar"
-        #    / "output to X%" / "half" / "factor of 0.5" / "to ZERO"
+        #    / "output to X%" / "half" / "factor of 0.5" / "to ZERO" /
+        #    "by N%" / "drops by N%" / "completely unavailable" /
+        #    "run at N% of forecast"
         if directive is None:
             has_solar_ctx = _RE_SOLAR_KEYWORDS.search(n) is not None
             m_red = _RE_SOLAR_REDU.search(n)
@@ -1227,10 +1556,15 @@ def _deterministic_interpret(
             m_half = _RE_SOLAR_HALF.search(n)
             m_approx_pct = _RE_SOLAR_APPROX_PCT.search(n)
             m_pct_plain = _RE_SOLAR_PCT_PLAIN.search(n)
+            m_by_pct = _RE_SOLAR_BY_PCT.search(n)
+            m_to_pct = _RE_SOLAR_TO_PCT.search(n)
+            m_at_pct_of = _RE_SOLAR_AT_PCT_OF.search(n)
+            m_unavailable = _RE_SOLAR_UNAVAILABLE.search(n)
             if hours is not None and (
                 m_red or m_outage or m_outage_full or m_zero or m_garble
                 or m_remain or m_remain_pct or m_frac_of or m_at_val
                 or m_factor or m_half or m_approx_pct or m_pct_plain
+                or m_by_pct or m_to_pct or m_at_pct_of or m_unavailable
             ):
                 if m_red:
                     factor = 1.0 - float(m_red.group(1)) / 100.0
@@ -1238,6 +1572,14 @@ def _deterministic_interpret(
                     factor = 1.0 - float(m_outage.group(1)) / 100.0
                 elif m_outage_full:
                     factor = 0.0
+                elif m_unavailable and has_solar_ctx:
+                    factor = 0.0
+                elif m_at_pct_of:
+                    factor = float(m_at_pct_of.group(1)) / 100.0
+                elif m_to_pct:
+                    factor = float(m_to_pct.group(1)) / 100.0
+                elif m_by_pct:
+                    factor = 1.0 - float(m_by_pct.group(1)) / 100.0
                 elif m_zero and has_solar_ctx:
                     factor = 0.0
                 elif m_garble:
@@ -1269,6 +1611,8 @@ def _deterministic_interpret(
                 if m_pct_plain and not has_solar_ctx:
                     pass  # silent
                 elif m_zero and not has_solar_ctx:
+                    pass
+                elif m_unavailable and not has_solar_ctx:
                     pass
                 else:
                     directive = {
