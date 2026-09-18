@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import List, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictFloat, StrictInt, field_validator, model_validator
 
 
 # ---------- Enums (allowed directive types and battery actions) ----------
@@ -29,20 +29,20 @@ BatteryAction = Literal["charge", "discharge", "idle"]
 class HourData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    hour: int = Field(..., ge=0, le=23)
-    demand_kwh: float = Field(..., ge=0)
-    solar_kwh: float = Field(..., ge=0)
-    tariff_bdt_per_kwh: float = Field(..., ge=0)
+    hour: StrictInt = Field(..., ge=0, le=23)
+    demand_kwh: StrictFloat = Field(..., ge=0)
+    solar_kwh: StrictFloat = Field(..., ge=0)
+    tariff_bdt_per_kwh: StrictFloat = Field(..., ge=0)
 
 
 class BatteryConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    capacity_kwh: float = Field(..., gt=0)
-    initial_energy_kwh: float = Field(..., ge=0)
-    minimum_energy_kwh: float = Field(..., ge=0)
-    max_charge_kwh_per_hour: float = Field(..., ge=0)
-    max_discharge_kwh_per_hour: float = Field(..., ge=0)
+    capacity_kwh: StrictFloat = Field(..., gt=0)
+    initial_energy_kwh: StrictFloat = Field(..., ge=0)
+    minimum_energy_kwh: StrictFloat = Field(..., ge=0)
+    max_charge_kwh_per_hour: StrictFloat = Field(..., ge=0)
+    max_discharge_kwh_per_hour: StrictFloat = Field(..., ge=0)
 
     @model_validator(mode="after")
     def _check_consistency(self) -> "BatteryConfig":
